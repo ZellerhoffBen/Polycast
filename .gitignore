@@ -216,3 +216,21 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+
+##########################
+# my stuff
+
+# macOS
+.DS_Store
+
+# Personal editor settings
+.vscode/
+
+# Generated audio
+/output.pcm
+/output.wav
+
+# Additional environment files
+.env.*
+!.env.example
