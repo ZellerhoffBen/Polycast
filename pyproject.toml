@@ -6,8 +6,10 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "beautifulsoup4>=4.15.0",
+    "black>=26.5.1",
     "dotenv>=0.9.9",
     "openai>=2.53.0",
     "pip>=26.2.1",
     "requests>=2.34.2",
+    "streamlit>=1.61.1",
 ]
