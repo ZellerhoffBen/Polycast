@@ -2,6 +2,7 @@ import json
 import os
 from io import BytesIO
 
+import lameenc
 import requests
 from mutagen import MutagenError
 from mutagen.mp3 import MP3
@@ -108,7 +109,22 @@ def generate_audio(output_text, output_language):
             "input": output_text,
             "voice": "Orus",
             "instructions": f"Read this text clearly in {LANGUAGES[output_language]}. Do not add or omit words.",
-            "response_format": "mp3",
+            "response_format": "pcm",
         },
     )
-    return validate_audio(response.content)
+    pcm = response.content
+    if (
+        not pcm
+        or len(pcm) % 2
+        or not response.headers.get("Content-Type", "").startswith("audio/pcm")
+    ):
+        raise ValueError(
+            "Der Sprachdienst hat keine vollständigen PCM-Audiodaten geliefert."
+        )
+    # Gemini returns 24 kHz, 16-bit mono PCM. Encode directly in memory.
+    encoder = lameenc.Encoder()
+    encoder.set_in_sample_rate(24000)
+    encoder.set_channels(1)
+    encoder.set_bit_rate(96)
+    encoder.set_quality(2)
+    return validate_audio(bytes(encoder.encode(pcm) + encoder.flush()))

@@ -102,16 +102,21 @@ def test_provider_payload_and_same_language_without_simplifying(monkeypatch):
     assert result["output_text"] == CONTENT["original_text"]
 
 
-def test_tts_requests_real_mp3_and_rejects_broken_audio(monkeypatch):
+def test_tts_encodes_pcm_as_mp3_and_rejects_broken_audio(monkeypatch):
     def post(url, **kwargs):
         assert url.endswith("/audio/speech")
-        assert kwargs["json"]["response_format"] == "mp3"
+        assert kwargs["json"]["response_format"] == "pcm"
         assert kwargs["json"]["provider"]["data_collection"] == "deny"
-        return SimpleNamespace(raise_for_status=lambda: None, content=AUDIO)
+        return SimpleNamespace(
+            raise_for_status=lambda: None,
+            content=bytes(24000),
+            headers={"Content-Type": "audio/pcm"},
+        )
 
     monkeypatch.setenv("API_KEY", "test-key")
     monkeypatch.setattr(requests, "post", post)
-    assert process_article.generate_audio("Hallo.", "de") == AUDIO
+    audio = process_article.generate_audio("Hallo.", "de")
+    assert process_article.validate_audio(audio) == audio
     with pytest.raises(ValueError):
         process_article.validate_audio(b"ID3invalid")
 
