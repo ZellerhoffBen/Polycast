@@ -19,8 +19,9 @@ def public_address(url):
         raise ValueError("Bitte einen öffentlichen HTTP- oder HTTPS-Link eingeben.")
     port = parts.port or (443 if parts.scheme == "https" else 80)
     addresses = socket.getaddrinfo(parts.hostname, port, type=socket.SOCK_STREAM)
-    if not addresses or any(
-        not ipaddress.ip_address(item[4][0]).is_global for item in addresses
+    ips = [ipaddress.ip_address(item[4][0]) for item in addresses]
+    if not ips or any(
+        not ip.is_global or ip.is_multicast or ip.is_reserved for ip in ips
     ):
         raise ValueError("Lokale und private Adressen sind nicht erlaubt.")
     return parts, addresses[0][4][0], port

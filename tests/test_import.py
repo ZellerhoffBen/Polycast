@@ -18,6 +18,8 @@ from services import scrape_article as importer
         "::1",
         "fc00::1",
         "::ffff:127.0.0.1",
+        "224.0.0.1",
+        "ff02::1",
     ],
 )
 def test_private_and_reserved_addresses_are_rejected(monkeypatch, address):
