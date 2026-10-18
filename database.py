@@ -83,7 +83,9 @@ class AudioFile(SQLModel, table=True):
 engine = create_engine(
     os.environ.get(
         "DATABASE_URL", "postgresql+psycopg://polycast:polycast@127.0.0.1:5432/polycast"
-    )
+    ),
+    hide_parameters=True,
+    connect_args={"options": "-c timezone=UTC"},
 )
 
 

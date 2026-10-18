@@ -1,46 +1,114 @@
-from services.scrape_article import scrape_article
+import json
+import os
+from io import BytesIO
+
+import requests
+from mutagen import MutagenError
+from mutagen.mp3 import MP3
+
 from prompts.instructions import get_system_prompt
-from services.pcm2wav import convert2wav
-import tempfile
+
+LANGUAGES = {
+    "de": "Deutsch",
+    "fr": "Français",
+    "en": "English",
+    "pt": "Português",
+    "uk": "Українська",
+    "es": "Español",
+}
+MAX_AUDIO_BYTES = 20_000_000
 
 
-# simplify the article
-def simplify_text(article_text, client, language, language_level):
-    system_prompt = get_system_prompt(language, language_level)
-    response = client.responses.create(
-        model="google/gemini-2.5-flash-lite",
-        input=article_text,
-        instructions=system_prompt,
+def openrouter(endpoint, payload):
+    key = os.environ.get("API_KEY")
+    if not key:
+        raise ValueError("Der OpenRouter-API-Key fehlt in der .env-Datei des Backends.")
+    response = requests.post(
+        f"https://openrouter.ai/api/v1/{endpoint}",
+        headers={"Authorization": f"Bearer {key}"},
+        json={**payload, "provider": {"data_collection": "deny"}},
+        timeout=(10, 180),
     )
-    return response.output_text
+    response.raise_for_status()
+    return response
 
 
-# text to speech
-def text2speech(simplified_article, client, temp_path):
-    with client.audio.speech.with_streaming_response.create(
-        model="google/gemini-3.1-flash-tts-preview",
-        input=simplified_article,
-        voice="Orus",
-        response_format="pcm",
-    ) as response:
-        response.stream_to_file(f"{temp_path}/output.pcm")
+def adapt_text(original_text, output_language, target_level):
+    response = openrouter(
+        "chat/completions",
+        {
+            "model": "google/gemini-2.5-flash-lite",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": get_system_prompt(output_language, target_level),
+                },
+                {"role": "user", "content": original_text},
+            ],
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "article",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "input_language": {
+                                "type": "string",
+                                "enum": [*LANGUAGES, "unsupported"],
+                            },
+                            "output_text": {"type": "string"},
+                        },
+                        "required": ["input_language", "output_text"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            "max_tokens": 10000,
+        },
+    )
+    data = response.json()
+    choice = data["choices"][0]
+    if choice.get("finish_reason") != "stop":
+        raise ValueError(
+            "Die Textverarbeitung wurde nicht vollständig abgeschlossen. Bitte einen kürzeren Text versuchen."
+        )
+    article = json.loads(choice["message"]["content"])
+    if article.get("input_language") not in LANGUAGES:
+        raise ValueError(
+            "Bitte einen Text auf Deutsch, Französisch, Englisch, Portugiesisch, Ukrainisch oder Spanisch verwenden."
+        )
+    text = article.get("output_text")
+    if not isinstance(text, str) or not text.strip() or len(text) > 20_000:
+        raise ValueError(
+            "Der KI-Dienst hat keinen gültigen vollständigen Text geliefert."
+        )
+    if target_level is None and article["input_language"] == output_language:
+        text = original_text
+    return {"input_language": article["input_language"], "output_text": text.strip()}
 
 
-def process_article(article_url, client, language, language_level):
+def validate_audio(data):
+    if not data or len(data) > MAX_AUDIO_BYTES:
+        raise ValueError("Die MP3-Datei ist leer oder grösser als 20 MB.")
+    try:
+        audio = MP3(BytesIO(data))
+    except MutagenError:
+        raise ValueError("Die Audiodaten sind keine gültige MP3-Datei.") from None
+    if audio.info.length <= 0:
+        raise ValueError("Die MP3-Datei enthält kein Audio.")
+    return data
 
-    temp_dir = tempfile.TemporaryDirectory()
-    temp_path = temp_dir.name
 
-    # Get article text
-    article_text = scrape_article(article_url)
-
-    simplified_article = simplify_text(article_text, client, language, language_level)
-
-    text2speech(simplified_article, client, temp_path)
-
-    convert2wav(f"{temp_path}/output.pcm", f"{temp_path}/output.wav")
-
-    with open(f"{temp_path}/output.wav", "rb") as wav:
-        wav_bytes = wav.read()
-        temp_dir.cleanup()
-        return wav_bytes
+def generate_audio(output_text, output_language):
+    response = openrouter(
+        "audio/speech",
+        {
+            "model": "google/gemini-3.1-flash-tts-preview",
+            "input": output_text,
+            "voice": "Orus",
+            "instructions": f"Read this text clearly in {LANGUAGES[output_language]}. Do not add or omit words.",
+            "response_format": "mp3",
+        },
+    )
+    return validate_audio(response.content)
