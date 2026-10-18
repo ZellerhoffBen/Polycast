@@ -234,3 +234,6 @@ __marimo__/
 # Additional environment files
 .env.*
 !.env.example
+
+# Encrypted database backups
+/backups/
