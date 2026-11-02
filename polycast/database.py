@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 
 from dotenv import load_dotenv
 from sqlalchemy import CheckConstraint, Column, DateTime
-from sqlmodel import Field, Session, SQLModel, create_engine
+from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 load_dotenv()
 
@@ -80,10 +80,13 @@ class AudioFile(SQLModel, table=True):
     )
 
 
+if not os.environ.get("DATABASE_URL"):
+    raise RuntimeError(
+        "DATABASE_URL fehlt. Bitte die Datenbankverbindung in .env eintragen."
+    )
+
 engine = create_engine(
-    os.environ.get(
-        "DATABASE_URL", "postgresql+psycopg://polycast:polycast@127.0.0.1:5432/polycast"
-    ),
+    os.environ["DATABASE_URL"],
     hide_parameters=True,
     connect_args={"options": "-c timezone=UTC"},
 )
@@ -92,3 +95,33 @@ engine = create_engine(
 def get_db():
     with Session(engine) as db:
         yield db
+
+
+def find_user(db, email):
+    # Lock the row while updating failed login attempts.
+    return db.exec(select(User).where(User.email == email).with_for_update()).first()
+
+
+def find_session(db, token_hash):
+    return db.exec(
+        select(LoginSession).where(LoginSession.token_hash == token_hash)
+    ).first()
+
+
+def load_content(db, content_id, user_id):
+    return db.exec(
+        select(Content).where(Content.id == content_id, Content.user_id == user_id)
+    ).first()
+
+
+def list_contents(db, user_id):
+    return db.exec(
+        select(Content, AudioFile.id)
+        .outerjoin(AudioFile, AudioFile.content_id == Content.id)
+        .where(Content.user_id == user_id)
+        .order_by(Content.created_at.desc())
+    ).all()
+
+
+def load_audio(db, content_id):
+    return db.exec(select(AudioFile).where(AudioFile.content_id == content_id)).first()

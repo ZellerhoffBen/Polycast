@@ -8,7 +8,6 @@ from bs4 import BeautifulSoup
 
 
 def public_address(url):
-    """Resolve once so the actual connection uses the checked IP address."""
     parts = urlsplit(url)
     if (
         parts.scheme not in ("http", "https")
@@ -32,6 +31,7 @@ def scrape_article(url):
         parts, address, port = public_address(url)
         connection = http.client.HTTPConnection(parts.hostname, port, timeout=15)
         try:
+            # Connect to the checked IP instead of looking up the hostname again.
             connection.sock = socket.create_connection((address, port), timeout=15)
             if parts.scheme == "https":
                 connection.sock = ssl.create_default_context().wrap_socket(
@@ -55,7 +55,7 @@ def scrape_article(url):
                 url = urljoin(url, location)
                 continue
             if response.status != 200:
-                raise ValueError(
+                raise http.client.HTTPException(
                     "Der Artikel konnte nicht geladen werden. Bitte Text direkt einfügen."
                 )
             if "text/html" not in response.getheader("Content-Type", ""):
@@ -68,6 +68,7 @@ def scrape_article(url):
         finally:
             connection.close()
         soup = BeautifulSoup(html, "html.parser")
+        # Remove menus and ads before collecting the article paragraphs.
         for element in soup.select(
             "script, style, nav, header, footer, aside, form, noscript, [hidden], [aria-hidden=true]"
         ):

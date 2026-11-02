@@ -2,15 +2,26 @@
 
 import os
 import subprocess
+import sys
 from datetime import datetime, timedelta
 from getpass import getpass
 from pathlib import Path
 
-from dotenv import load_dotenv
-from sqlalchemy.engine import make_url
+BACKUP_DIR = Path(__file__).resolve().parents[1] / "backups"
+
+
+def cleanup():
+    cutoff = (datetime.now() - timedelta(days=7)).timestamp()
+    for path in BACKUP_DIR.glob("polycast-*.dump.enc"):
+        if path.stat().st_mtime <= cutoff:
+            path.unlink()
 
 
 def backup():
+    from dotenv import load_dotenv
+    from sqlalchemy.engine import make_url
+
+    cleanup()
     load_dotenv()
     url = make_url(os.environ["DATABASE_URL"])
     password = os.environ.get("BACKUP_PASSWORD") or getpass("Backup-Passwort: ")
@@ -31,6 +42,7 @@ def backup():
         capture_output=True,
         check=True,
     )
+    # Encrypt in memory; only the encrypted dump is written to disk.
     encrypted = subprocess.run(
         [
             "openssl",
@@ -48,23 +60,23 @@ def backup():
         capture_output=True,
         check=True,
     )
-    directory = Path("backups")
-    directory.mkdir(mode=0o700, exist_ok=True)
-    destination = directory / f"polycast-{datetime.now():%Y-%m-%d}.dump.enc"
+    BACKUP_DIR.mkdir(mode=0o700, exist_ok=True)
+    destination = BACKUP_DIR / f"polycast-{datetime.now():%Y-%m-%d}.dump.enc"
     temporary = destination.with_suffix(".tmp")
     temporary.write_bytes(encrypted.stdout)
     temporary.chmod(0o600)
     temporary.replace(destination)
-    cutoff = (datetime.now() - timedelta(days=7)).timestamp()
-    for old_backup in directory.glob("polycast-*.dump.enc"):
-        if old_backup.stat().st_mtime < cutoff:
-            old_backup.unlink()
     print(f"Backup erstellt: {destination}")
 
 
 if __name__ == "__main__":
     try:
-        backup()
+        if sys.argv[1:] == ["--cleanup"]:
+            cleanup()
+        elif sys.argv[1:]:
+            raise SystemExit("Aufruf: python -m polycast.backup [--cleanup]")
+        else:
+            backup()
     except (
         KeyError,
         ValueError,
