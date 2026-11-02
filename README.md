@@ -1,6 +1,6 @@
 # Polycast
 
-Lokales Schulprojekt: Artikel-Link oder Text eingeben, übersetzen oder auf A2/B1/B2 vereinfachen, als MP3 anhören und im persönlichen Verlauf speichern. Unterstützt Deutsch, Französisch, Englisch, Portugiesisch, Ukrainisch und Spanisch.
+Artikel-Link oder Text eingeben, übersetzen oder an A1/A2/B1/B2/C1/C2 anpassen, als MP3 anhören und im persönlichen Verlauf speichern. Unterstützt Deutsch, Französisch, Englisch, Portugiesisch, Ukrainisch und Spanisch.
 
 ## Voraussetzungen
 
@@ -11,7 +11,7 @@ Lokales Schulprojekt: Artikel-Link oder Text eingeben, übersetzen oder auf A2/B
 
 ## Einrichten
 
-Alle Befehle im Projektordner ausführen.
+Alle Befehle im Projektordner `Vinte` ausführen, wo `pyproject.toml` liegt. Nicht in den Unterordner `polycast` wechseln.
 
 1. Abhängigkeiten installieren:
 
@@ -19,14 +19,26 @@ Alle Befehle im Projektordner ausführen.
    uv sync --locked
    ```
 
-2. Mit dem lokalen PostgreSQL-Administrationskonto einen Benutzer und eine Datenbank anlegen:
+2. PostgreSQL installieren und starten. Auf macOS mit [Homebrew](https://formulae.brew.sh/formula/postgresql@18):
+
+   ```sh
+   brew install postgresql@18
+   export PATH="$(brew --prefix postgresql@18)/bin:$PATH"
+   brew services run postgresql@18
+   ```
+
+   Die `export PATH=...`-Zeile auch in `~/.zshrc` eintragen, damit `createuser`, `createdb` und die Backup-Befehle in neuen Terminals verfügbar sind. `command not found: createuser` bedeutet, dass PostgreSQL fehlt oder sein `bin`-Ordner nicht im PATH steht.
+
+   `brew services run` startet PostgreSQL ohne Autostart bei der Anmeldung. Nach einem Neustart denselben Befehl erneut ausführen. Stoppen: `brew services stop postgresql@18`.
+
+3. Einmalig mit dem lokalen PostgreSQL-Administrationskonto einen Benutzer und eine Datenbank anlegen. Bei Homebrew ist das dein macOS-Benutzer:
 
    ```sh
    createuser --pwprompt polycast
    createdb --owner=polycast polycast
    ```
 
-3. `.env.example` nach `.env` kopieren, **falls noch keine `.env` existiert**. Beide Werte eintragen; vorhandenen API-Key behalten:
+4. `.env.example` nach `.env` kopieren, **falls noch keine `.env` existiert**. Beide Werte eintragen; vorhandenen API-Key behalten:
 
    ```dotenv
    API_KEY=dein-openrouter-key
@@ -35,7 +47,13 @@ Alle Befehle im Projektordner ausführen.
 
    Das Datenbankpasswort muss zum angelegten Benutzer passen. Sonderzeichen im Passwort URL-kodieren. Ohne `DATABASE_URL` startet das Backend nicht. `.env` bleibt ausserhalb von Git.
 
-4. PostgreSQL nur lokal betreiben (`listen_addresses = 'localhost'`). Im OpenRouter-Konto ein kleines Kostenlimit setzen.
+5. PostgreSQL nur lokal betreiben (`listen_addresses = 'localhost'`, bei Homebrew bereits voreingestellt). Im OpenRouter-Konto ein kleines Kostenlimit setzen.
+
+Bei einer bestehenden Datenbank aus der Version mit A2/B1/B2 einmalig die erlaubten Sprachniveaus erweitern (gespeicherte Inhalte bleiben erhalten). Bei einer neuen Datenbank ist das nicht nötig:
+
+```sh
+psql -h 127.0.0.1 -U polycast -d polycast -v ON_ERROR_STOP=1 -f migrations/001_language_levels.sql
+```
 
 ## Starten
 
@@ -57,7 +75,7 @@ Die Tabellen werden beim ersten Start angelegt. Genau einen Backend-Prozess verw
 
 ## Aufbau
 
-| Datei / Ordner | Aufgabe aus dem Konzept |
+| Datei / Ordner | Aufgabe |
 | --- | --- |
 | `app.py`, `polycast/ui.py`, `polycast/auth_forms.py` | Oberfläche, Formulare und Cookie-Anmeldung |
 | `polycast/api.py`, `polycast/schemas.py` | HTTP-Endpunkte, Eingabeprüfung und Fehlerantworten |
@@ -91,8 +109,6 @@ TEST_DATABASE_URL='postgresql+psycopg://polycast:dein-passwort@127.0.0.1:5432/po
 ```
 
 Jeder Test verwendet ein eigenes Schema und entfernt es danach; der Testbenutzer benötigt das Recht, Schemas anzulegen. Artikel- und KI-Antworten sind simuliert, das Testaudio enthält Stille. Es entstehen keine API-Kosten.
-
-Für die Abnahme TC-01 bis TC-07 mit zwei Konten über die Oberfläche durchgehen: Registrierung/Login/Logout, Kontosperre, Artikel→Französisch A2, Audio/Download, Speichern/Verlauf, ungültige URLs und fremder Datenzugriff. Zusätzlich die 36 Sprachkombinationen, A2/B1/B2, Kernaussagen und vollständige Vertonung mit echten Texten beurteilen. Änderungen am Text müssen alte Ergebnisse verwerfen; API-Fehler müssen Eingaben erhalten. Chrome/Edge, Safari und Offlinewiedergabe prüfen. Ergebnisse mit Datum, Browser und Tester dokumentieren; grüne automatisierte Tests ersetzen diese Abnahme nicht.
 
 ## Backups
 

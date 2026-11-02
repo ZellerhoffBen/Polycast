@@ -49,7 +49,7 @@ class Content(SQLModel, table=True):
         CheckConstraint("output_language IN ('de','fr','en','pt','uk','es')"),
         CheckConstraint(
             "(mode = 'translate_only' AND target_level IS NULL) OR "
-            "(mode = 'simplify' AND target_level IS NOT NULL AND target_level IN ('A2','B1','B2'))"
+            "(mode = 'simplify' AND target_level IS NOT NULL AND target_level IN ('A1','A2','B1','B2','C1','C2'))"
         ),
     )
 

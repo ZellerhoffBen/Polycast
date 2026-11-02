@@ -104,7 +104,7 @@ def show_options():
         on_change=clear_result,
     )
     simplify = st.checkbox(
-        "Text vereinfachen",
+        "Sprachniveau anpassen",
         value=True,
         key="simplify",
         persist_state="session",
@@ -112,7 +112,8 @@ def show_options():
     )
     level = st.selectbox(
         "Sprachniveau",
-        ["A2", "B1", "B2"],
+        ["A1", "A2", "B1", "B2", "C1", "C2"],
+        index=1,
         disabled=not simplify,
         key="level",
         persist_state="session",
@@ -221,7 +222,7 @@ def history_label(item):
         .strftime("%d.%m.%Y %H:%M")
     )
     mode = (
-        f"Vereinfacht ({item['target_level']})"
+        f"Angepasst ({item['target_level']})"
         if item["mode"] == "simplify"
         else "Ohne Vereinfachung"
     )

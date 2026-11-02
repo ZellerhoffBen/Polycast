@@ -51,7 +51,7 @@ class TextRequest(BaseModel):
     original_text: ArticleText
     output_language: Language
     mode: Literal["simplify", "translate_only"]
-    target_level: Literal["A2", "B1", "B2"] | None = None
+    target_level: Literal["A1", "A2", "B1", "B2", "C1", "C2"] | None = None
 
     @model_validator(mode="after")
     def check_level(self):

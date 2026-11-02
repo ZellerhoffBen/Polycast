@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID
 
+import pytest
 from sqlalchemy import event
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
@@ -134,7 +135,8 @@ def test_tc02_five_failed_logins_lock_for_15_minutes(client, auth, monkeypatch):
     assert client.post("/auth/login", json=CREDENTIALS).status_code == 200
 
 
-def test_tc03_article_to_french_a2(client, auth, monkeypatch):
+@pytest.mark.parametrize("level", ["A1", "A2", "B1", "B2", "C1", "C2"])
+def test_tc03_article_to_french(client, auth, monkeypatch, level):
     html = b"<nav>Menu</nav><article><p>Die Schule oeffnet am Montag.</p><aside>Werbung</aside></article>"
     response = SimpleNamespace(
         status=200, getheader=lambda *args: "text/html", read=lambda size: html
@@ -163,17 +165,25 @@ def test_tc03_article_to_french_a2(client, auth, monkeypatch):
     def provider(endpoint, payload):
         assert endpoint == "chat/completions"
         assert "fr" in payload["messages"][0]["content"]
-        assert "A2" in payload["messages"][0]["content"]
+        assert f"CEFR level {level}" in payload["messages"][0]["content"]
         return text_response(
             json.dumps({"input_language": "de", "output_text": CONTENT["output_text"]})
         )
 
     monkeypatch.setattr(openrouter, "request", provider)
-    request = {**CONTENT, "original_text": article.json()["original_text"]}
+    request = {
+        **CONTENT,
+        "original_text": article.json()["original_text"],
+        "target_level": level,
+    }
     result = client.post("/texts/adapt", headers=auth, json=request)
     assert result.status_code == 200
     assert result.json()["output_text"] == CONTENT["output_text"]
     assert client.get("/contents", headers=auth).json() == []
+    saved = save(client, auth, content={**request, **result.json()})
+    assert saved.status_code == 201
+    history = client.get("/contents", headers=auth).json()
+    assert history[0]["target_level"] == level
     # Malformed provider output must still return the agreed error JSON.
     monkeypatch.setattr(openrouter, "request", lambda *args: text_response("null"))
     failed = client.post("/texts/adapt", headers=auth, json=request)
